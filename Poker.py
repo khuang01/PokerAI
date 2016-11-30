@@ -28,6 +28,9 @@ def cardToID((value, suit)):
 def cardsToID(lst):
 	return [cardToID(i) for i in lst]
 
+def handToGUI(hand):
+	return cardsToGUI(handtoCards(hand))
+
 # 0: junk, 1: pair, 2: two pair, 3: triple, 4: straight, 5: flush
 # 6: full house, 7: quad, 8: straight flush
 def evaluatePile(pile):
@@ -161,9 +164,17 @@ def GUIToCards(lst):
 
 
 class Game:
-	def __init__(self, numPlayers):
+	def __init__(self, numPlayers, startingChips, bigBlind):
+		self.bigBlind = bigBlind
+		self.bettingRound = 0
+		self.pot = 0
+		self.curRaise = 0
+		self.playerRaise = 0
 		self.cards = [False for i in range(52)]
 		self.board = [-1 for i in range(5)]
+		self.gameOver = False
+		# -1 if tie
+		self.roundWinner = 0
 		for i in range(5):
 			card = random.randint(0,51)
 			while (self.cards[card]):
@@ -171,18 +182,108 @@ class Game:
 			self.cards[card] = True
 			self.board[i] = card
 		self.playerCards = [-1 for i in range(2 * numPlayers)]
+		self.totalChips = [startingChips for i in range(numPlayers)]
+		self.allIn = [False for i in range(numPlayers)]
 		for i in range(2 * numPlayers):
 			card = random.randint(0,51)
 			while (self.cards[card]):
 				card = random.randint(0,51)
 			self.cards[card] = True
-			self.playerCards.append(card)
+			self.playerCards[i] = card
 		self.revealedCards = 0
+		self.p1Wins, self.tie, self.p2Wins = self.simulateGames(self.getPlayerCards(0), self.getPlayerCards(1), 10000)
+		
+	def restart(self):
+		self.bigBlind = 1 - self.bigBlind
+		self.cards = [False for i in range(52)]
+		for i in range(5):
+			card = random.randint(0,51)
+			while (self.cards[card]):
+				card = random.randint(0,51)
+			self.cards[card] = True
+			self.board[i] = card
+		self.allIn = [False for i in range(numPlayers)]
+		for i in range(2 * numPlayers):
+			card = random.randint(0,51)
+			while (self.cards[card]):
+				card = random.randint(0,51)
+			self.cards[card] = True
+			self.playerCards[i] = card
+		self.revealedCards = 0
+		self.p1Wins, self.tie, self.p2Wins = self.simulateGames(self.getPlayerCards(0), self.getPlayerCards(1), 10000)
+
+	def blinds(self):
+		smallBlind = 1 - self.bigBlind
+		big = min(2, self.totalChips[self.bigBlind], self.totalChips[smallBlind])
+		self.pot += big
+		self.totalChips[self.bigBlind] -= big
+		small = min(1, self.totalChips[self.bigBlind], self.totalChips[smallBlind])
+		self.pot += small
+		self.totalChips[smallBlind] -= small
+		self.curRaise = big - small
+		self.playerRaise = self.bigBlind
 
 	def getPlayerCards(self, player):
 		return (self.playerCards[2 * player], self.playerCards[2 * player + 1])
 
-	def simulateGames(self, player1, player2, n):
+	def flop(self):
+		self.revealedCards = 3
+		self.p1Wins, self.tie, self.p2Wins = self.simulateGames(self.getPlayerCards(0), self.getPlayerCards(1), 10000)
+		self.bettingRound = 0
+
+	def turn(self):
+		self.revealedCards = 4
+		self.p1Wins, self.tie, self.p2Wins = self.simulateGames(self.getPlayerCards(0), self.getPlayerCards(1), 10000)
+		self.bettingRound = 0
+
+	def river(self):
+		self.revealedCards = 5
+		self.p1Wins, self.tie, self.p2Wins = self.simulateGames(self.getPlayerCards(0), self.getPlayerCards(1), 10000)
+		self.bettingRound = 0
+		if self.p1Wins > .99:
+			self.roundWinner = 0
+		elif self.tie > .99:
+			self.roundWinner = -1
+		else:
+			self.roundWinner = 1
+
+	def giveBack(self, playerNum, amt):
+		self.pot -= amt
+		self.totalChips[playerNum] += amt
+
+	# returns False -> checks/calls, True -> raises,
+	def pushChips(self, playerNum, amt):
+		assert amt >= self.curRaise, "Not enough chips to call/raise"
+		amt = min(amt, self.totalChips[playerNum])
+		if amt > self.curRaise:
+			self.curRaise = amt - self.curRaise
+			self.playerRaise = playerNum
+			result = True
+		else:
+			self.curRaise = 0
+			result = False
+			self.giveBack(1 - playerNum, self.curRaise - amt)
+		self.pot += amt
+		self.totalChips[playerNum] -= amt
+		if self.totalChips[playerNum] == 0:
+			self.allIn[playerNum] = True
+		return result
+
+	def distributeChips(self):
+		if self.roundWinner == -1:
+			self.totalChips[0] += self.pot / 2
+			self.totalChips[1] += self.pot / 2
+		else:
+			self.totalChips[self.roundWinner] += self.pot
+		self.pot = 0
+		self.curRaise = 0
+		for i in range(self.numPlayers):
+			if self.totalChips[i] == 0:
+				self.gameOver = True
+			else:
+				self.allIn[i] = False
+
+	def simulateGames(self, player1, player2, n=10000):
 		simulationBoard = [-1 for i in range(7)]
 		for i in range(5):
 			simulationBoard[i] = self.board[i]
@@ -195,6 +296,21 @@ class Game:
 			allCards[i] = True
 		total1 = 0
 		tie = 0
+		if self.revealedCards == 5:
+			simulationBoard[5] = player1[0]
+			simulationBoard[6] = player1[1]
+			e1 = evaluatePile(simulationBoard)
+			simulationBoard[5] = player2[0]
+			simulationBoard[6] = player2[1]
+			e2 = evaluatePile(simulationBoard)
+			p1Wins = 0.
+			tie = 0.
+			if e1 > e2:
+				p1Wins = 1.
+			elif e1 == e2:
+				tie = 1.
+			p2Wins = 1. - p1Wins - tie
+			return (p1Wins, tie, p2Wins)
 		for game in range(n):
 			for i in range(self.revealedCards, 5):
 				card = random.randint(0,51)
@@ -214,9 +330,12 @@ class Game:
 				tie += 1
 			for i in range(self.revealedCards, 5):
 				allCards[simulationBoard[i]] = False
-		return (total1, tie)
+		p1Wins = float(total1) / n
+		tie = float(tie) / n
+		p2Wins = 1. - p1Wins - tie
+		return (p1Wins, tie, p2Wins)
 
-	def standardProb(self, player, n):
+	def standardProb(self, player, n=100):
 		allCards = [False for i in range(52)]
 		for i in range(self.revealedCards):
 			allCards[self.board[i]] = True
@@ -228,12 +347,74 @@ class Game:
 			for j in range(i + 1, 52):
 				if allCards[i] or allCards[j]:
 					continue
-				wins, ties = self.simulateGames(player, (i, j), n)
-				if 2 * wins + ties > n:
+				p1Wins, tie, p2Wins = self.simulateGames(player, (i, j), n)
+				if p1Wins + .5 * tie > 0.5:
 					count += 1
 				total += 1
-		return count, total
+		return float(count) / total
 	
+
+class Player(object):
+	def __init__(self, game, playerNum):
+		self.game = game
+		self.playerNum = playerNum
+		self.cards = game.getPlayerCards(playerNum)
+		self.standardProb = 0.
+		# self.standardProb = self.game.standardProb(self.cards)
+		self.revealedCards = 0
+
+	# def linkGame(self, game):
+	# 	self.game = game
+
+	def refreshRevealedCards(self):
+		self.revealedCards = game.revealedCards
+
+	def refreshCards(self):
+		self.cards = game.getPlayerCards(self.playerNum)
+
+	def refreshStandardProb(self, n=100):
+		self.standardProb = self.game.standardProb(self.cards, n)
+
+	def action(self):
+		pass
+
+class RandomAI(Player):
+	def action(self):
+		result = random.randint(-1,1)
+		if (result == 1):
+			return self.game.curRaise + max(self.game.pot, self.game.curRaise)
+		elif (result == 0 or self.game.curRaise == 0):
+			return self.game.curRaise
+		else:
+			return -1
+	# filler function; RandomAI has no use for standardProb
+	def refreshStandardProb(self, n=100):
+		self.standardProb = 0
+
+class RationalAI(Player):
+	# def __init__(self, game, playerNum, c, r):
+	# 	super(RationalAI, self).__init__(game, playerNum):
+	# 	self.c = c
+	# 	self.r = r
+	def action(self):
+		if self.standardProb > .9:
+			return self.game.curRaise + max(self.game.pot, self.game.curRaise)
+		elif self.standardProb > .5:
+			return self.game.curRaise
+		elif self.game.curRaise:
+			return -1
+		else:
+			return 0
+
+class AlwaysCallAI(Player):
+	def action(self):
+		return self.game.curRaise
+	# filler function; AlwaysCallAI has no use for standardProb
+	def refreshStandardProb(self, n=100):
+		self.standardProb = 0
+
+# class AgressiveAI(Player):
+
 
 # newGame = Game(2)
 # begin = time.time()
