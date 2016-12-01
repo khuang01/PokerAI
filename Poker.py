@@ -165,6 +165,7 @@ def GUIToCards(lst):
 
 class Game:
 	def __init__(self, numPlayers, startingChips, bigBlind):
+		self.numPlayers = numPlayers
 		self.bigBlind = bigBlind
 		self.bettingRound = 0
 		self.pot = 0
@@ -174,7 +175,7 @@ class Game:
 		self.board = [-1 for i in range(5)]
 		self.gameOver = False
 		# -1 if tie
-		self.roundWinner = 0
+		self.roundWinner = -1
 		for i in range(5):
 			card = random.randint(0,51)
 			while (self.cards[card]):
@@ -194,6 +195,7 @@ class Game:
 		self.p1Wins, self.tie, self.p2Wins = self.simulateGames(self.getPlayerCards(0), self.getPlayerCards(1), 10000)
 		
 	def restart(self):
+		self.roundWinner = -1
 		self.bigBlind = 1 - self.bigBlind
 		self.cards = [False for i in range(52)]
 		for i in range(5):
@@ -251,7 +253,9 @@ class Game:
 		self.pot -= amt
 		self.totalChips[playerNum] += amt
 
-	# returns False -> checks/calls, True -> raises,
+	# returns False -> checks/calls, True -> raises
+	# pushChips takes in the amt that the player desires to push,
+	# and then reduces it down if player does not have enough
 	def pushChips(self, playerNum, amt):
 		assert amt >= self.curRaise, "Not enough chips to call/raise"
 		amt = min(amt, self.totalChips[playerNum])
@@ -260,9 +264,9 @@ class Game:
 			self.playerRaise = playerNum
 			result = True
 		else:
-			self.curRaise = 0
 			result = False
 			self.giveBack(1 - playerNum, self.curRaise - amt)
+			self.curRaise = 0
 		self.pot += amt
 		self.totalChips[playerNum] -= amt
 		if self.totalChips[playerNum] == 0:
@@ -352,6 +356,27 @@ class Game:
 					count += 1
 				total += 1
 		return float(count) / total
+
+	def standardProbEst(self, player, n=100):
+		allCards = [False for i in range(52)]
+		for i in range(self.revealedCards):
+			allCards[self.board[i]] = True
+		for i in player:
+			allCards[i] = True
+		count = 0
+		total = 0
+		for i in range(500):
+			card1 = random.randint(0,51)
+			while (self.cards[card1]):
+				card1 = random.randint(0,51)
+			card2 = random.randint(0,51)
+			while (self.cards[card2] or card1 == card2):
+				card2 = random.randint(0,51)
+			p1Wins, tie, p2Wins = self.simulateGames(player, (card1, card2), n)
+			if p1Wins + .5 * tie > 0.5:
+				count += 1
+			total += 1
+		return float(count) / total
 	
 
 class Player(object):
@@ -360,6 +385,7 @@ class Player(object):
 		self.playerNum = playerNum
 		self.cards = game.getPlayerCards(playerNum)
 		self.standardProb = 0.
+		self.standardProbEst = 0.
 		# self.standardProb = self.game.standardProb(self.cards)
 		self.revealedCards = 0
 
@@ -374,6 +400,7 @@ class Player(object):
 
 	def refreshStandardProb(self, n=100):
 		self.standardProb = self.game.standardProb(self.cards, n)
+		self.standardProbEst = self.game.standardProbEst(self.cards, n)
 
 	def action(self):
 		pass
@@ -412,6 +439,7 @@ class AlwaysCallAI(Player):
 	# filler function; AlwaysCallAI has no use for standardProb
 	def refreshStandardProb(self, n=100):
 		self.standardProb = 0
+
 
 # class AgressiveAI(Player):
 

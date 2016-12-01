@@ -83,11 +83,101 @@ from Poker import *
 # print p1.action()
 # p2 = RationalAI(newGame, 1)
 
-newGame = Game(2, 100, 0)
-p1 = RandomAI(newGame, 0)
-p2 = RationalAI(newGame, 1)
-newGame.blinds()
-print newGame.totalChips
+game = Game(2, 100, 0)
+print handToGUI(game.board)
+print handToGUI(game.getPlayerCards(0))
+print handToGUI(game.getPlayerCards(1))
+p = [None, None]
+p[0] = RandomAI(game, 0)
+p[1] = RationalAI(game, 1)
+game.blinds()
+startPlayer = 1 - game.bigBlind
+curPlayer = startPlayer
+p[1].refreshStandardProb()
+# p[1].standardProb = .7
+print "Standard prob: ", p[1].standardProb
+print "Standard prob est: ", p[1].standardProbEst
 
-
-
+cc = 0
+while (cc < 2):
+	push = min(p[curPlayer].action(), game.curRaise + game.totalChips[1 - curPlayer])
+	if push == -1:
+		game.roundWinner = 1 - curPlayer
+		game.gameOver = True
+		break
+	print "curPlayer: ", curPlayer, "curRaise: ", game.curRaise, "curPot: ", game.pot, "Push: ", push
+	if push == game.curRaise:
+		cc += 1
+	else:
+		cc = 1
+	game.pushChips(curPlayer, push)
+	curPlayer = 1 - curPlayer
+print "Pot: ", game.pot, "Totalchips: ", game.totalChips
+if not game.gameOver:
+	print "FLOP"
+	game.flop()
+	p[1].refreshStandardProb()
+	print "Standard prob: ", p[1].standardProb
+	print "Standard prob est: ", p[1].standardProbEst
+	curPlayer = startPlayer
+	cc = 0
+	while (cc < 2):
+		push = min(p[curPlayer].action(), game.curRaise + game.totalChips[1 - curPlayer])
+		if push == -1:
+			game.roundWinner = 1 - curPlayer
+			game.gameOver = True
+			break
+		print "curPlayer: ", curPlayer, "curRaise: ", game.curRaise, "curPot: ", game.pot, "Push: ", push
+		if push == game.curRaise:
+			cc += 1
+		else:
+			cc = 1
+		game.pushChips(curPlayer, push)
+		curPlayer = 1 - curPlayer
+	print "Pot: ", game.pot, "Totalchips: ", game.totalChips
+if not game.gameOver:
+	print "TURN"
+	game.turn()
+	p[1].refreshStandardProb()
+	print "Standard prob: ", p[1].standardProb
+	print "Standard prob est: ", p[1].standardProbEst
+	curPlayer = startPlayer
+	cc = 0
+	while (cc < 2):
+		push = min(p[curPlayer].action(), game.curRaise + game.totalChips[1 - curPlayer])
+		if push == -1:
+			game.roundWinner = 1 - curPlayer
+			game.gameOver = True
+			break
+		print "curPlayer: ", curPlayer, "curRaise: ", game.curRaise, "curPot: ", game.pot, "Push: ", push
+		if push == game.curRaise:
+			cc += 1
+		else:
+			cc = 1
+		game.pushChips(curPlayer, push)
+		curPlayer = 1 - curPlayer
+	print "Pot: ", game.pot, "Totalchips: ", game.totalChips
+if not game.gameOver:
+	print "RIVER"
+	game.river()
+	p[1].refreshStandardProb()
+	print "Standard prob: ", p[1].standardProb
+	print "Standard prob est: ", p[1].standardProbEst
+	curPlayer = startPlayer
+	cc = 0
+	while (cc < 2):
+		push = min(p[curPlayer].action(), game.curRaise + game.totalChips[1 - curPlayer])
+		if push == -1:
+			game.roundWinner = 1 - curPlayer
+			game.gameOver = True
+			break
+		print "curPlayer: ", curPlayer, "curRaise: ", game.curRaise, "curPot: ", game.pot, "Push: ", push
+		if push == game.curRaise:
+			cc += 1
+		else:
+			cc = 1
+		game.pushChips(curPlayer, push)
+		curPlayer = 1 - curPlayer
+	print "Pot: ", game.pot, "Totalchips: ", game.totalChips
+game.distributeChips()
+print "Final Pot: ", game.pot, "Final Totalchips: ", game.totalChips
