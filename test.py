@@ -83,6 +83,30 @@ from Poker import *
 # print p1.action()
 # p2 = RationalAI(newGame, 1)
 
+
+def playRound():
+	p[1].refreshStandardProb()
+	print "Standard prob: ", p[1].standardProb
+	print "Standard prob est: ", p[1].standardProbEst
+	curPlayer = startPlayer
+	cc = 0
+	while (cc < 2):
+		push = min(p[curPlayer].action(), game.curRaise + game.totalChips[1 - curPlayer])
+		if push == -1:
+			game.roundWinner = 1 - curPlayer
+			game.gameOver = True
+			break
+		print "curPlayer: ", curPlayer, "curRaise: ", game.curRaise, "curPot: ", game.pot, "Push: ", push
+		if push == game.curRaise:
+			cc += 1
+		else:
+			cc = 1
+		game.pushChips(curPlayer, push)
+		curPlayer = 1 - curPlayer
+	print "Pot: ", game.pot, "Totalchips: ", game.totalChips
+
+
+
 game = Game(2, 100, 0)
 print handToGUI(game.board)
 print handToGUI(game.getPlayerCards(0))
