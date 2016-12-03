@@ -186,6 +186,7 @@ class Game:
 		self.startPlayer = 1 - bigBlind
 		self.omniscientProb = [[-1.,-1.,-1.,-1.], [-1.,-1.,-1.,-1.]]
 		self.numRaises = [0, 0]
+		self.chipsHist = []
 		# -1 if tie
 		self.roundWinner = -1
 		for i in range(5):
@@ -221,6 +222,7 @@ class Game:
 	def newGame(self):
 		self.gameOver = False
 		self.totalChips = [self.startingChips for i in range(self.numPlayers)]
+		self.chipsHist = []
 
 	def playGame(self):
 		self.roundNum = 0
@@ -233,6 +235,7 @@ class Game:
 			self.playRound()
 			self.printCurrentState()
 			self.redeal()
+			self.chipsHist.append(self.totalChips[1])
 		if self.totalChips[0]:
 			return 0
 		else:
@@ -261,7 +264,7 @@ class Game:
 	def playStage(self):
 		curPlayer = self.startPlayer
 		for player in self.players:
-			player.refreshStandardProbEst(.3)
+			player.refreshStandardProbEst(.25)
 			player.refreshR()
 		# print "Standard prob: ", p[1].standardProb
 		print "Standard prob est: ", self.players[1].standardProbEst
@@ -627,13 +630,13 @@ class SGDAI(Player):
 
 	def updateParameters(self):
 		opponentCards = self.game.getPlayerCards(1 - self.playerNum)
-		for stage in range(1, numCardsToStage(self.game.revealedCards) + 1):
+		for stage in range(1, numCardsToStage(self.game.revealedCards)):
 			print "Stage: ", stage
 			diffP = self.refinedP[stage] - self.game.omniscientProb[self.playerNum][stage]
-			self.a -= self.eta * 2 * diffP * self.m ** self.R[stage] * self.estP[stage]
-			self.b -= self.eta * 2 * diffP * self.m ** self.R[stage]
-			# self.m -= self.eta * 2 * diffP * self.R[stage] * self.refinedP[stage] / self.m
-			# self.m = max(self.m, .5)
+			self.a -= self.eta * 2 * diffP * self.m ** self.R[stage + 1] * self.estP[stage]
+			self.b -= self.eta * 2 * diffP * self.m ** self.R[stage + 1]
+			self.m -= self.eta * diffP * self.R[stage + 1] * self.refinedP[stage] / self.m
+			self.m = min(.9, max(self.m, .6))
 		print "a: ", self.a, "b: ", self.b, "m: ", self.m
 
 
