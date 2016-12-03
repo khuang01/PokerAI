@@ -590,7 +590,7 @@ class PotAI(Player):
 			return self.game.curRaise
 
 class SGDAI(Player):
-	def __init__(self, m=.688, a=0.789, b=-.052., eta=.03):
+	def __init__(self, m=.8, a=0.8, b=-.052, eta=.03):
 		super(SGDAI, self).__init__()
 		self.m = m
 		self.a = a
@@ -607,11 +607,11 @@ class SGDAI(Player):
 		self.estP[stage] = self.standardProbEst
 
 		p = self.standardProbEst
-		p = self.m ** self.R[stage] * (self.a * p + self.b)
+		p = self.m ** self.game.numRaises[1 - self.playerNum] * (self.a * p + self.b)
 		
 		self.refinedP[stage] = p
 		print "Stage: ", stage, "Estimated p: ", p
-		if p > .7:
+		if p > .65:
 			return self.game.curRaise + self.game.pot
 
 		B = self.game.curRaise
@@ -632,8 +632,8 @@ class SGDAI(Player):
 			diffP = self.refinedP[stage] - self.game.omniscientProb[self.playerNum][stage]
 			self.a -= self.eta * 2 * diffP * self.m ** self.R[stage] * self.estP[stage]
 			self.b -= self.eta * 2 * diffP * self.m ** self.R[stage]
-			self.m -= self.eta * 2 * diffP * self.R[stage] * self.refinedP[stage] / self.m
-			self.m = max(self.m, .5)
+			# self.m -= self.eta * 2 * diffP * self.R[stage] * self.refinedP[stage] / self.m
+			# self.m = max(self.m, .5)
 		print "a: ", self.a, "b: ", self.b, "m: ", self.m
 
 

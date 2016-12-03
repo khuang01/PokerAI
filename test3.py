@@ -3,13 +3,13 @@ import time
 
 game = Game(2, 100, 0)
 game.linkPlayer(0, RationalAI())
-game.linkPlayer(1, PotAI())
+game.linkPlayer(1, SGDAI())
 # game.linkPlayer(1, SGDAI())
 
 count = [0, 0]
 roundlengths = []
 history = []
-for i in range(5):
+for i in range(30):
 	p2wins = game.playGame()
 	count[p2wins] += 1
 	if p2wins:
