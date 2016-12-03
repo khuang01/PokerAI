@@ -2,6 +2,12 @@ import numpy as np
 import random
 import time
 
+def numCardsToStage(revealedCards):
+	if revealedCards == 0:
+		return 0
+	else:
+		return revealedCards - 2
+
 def IDtoCard(id):
 	# (value, suit)
 	return (id / 4 + 2, id % 4)
@@ -169,6 +175,7 @@ class Game:
 		self.numPlayers = numPlayers
 		self.bigBlind = bigBlind
 		self.bettingRound = 0
+		self.totalPush = 0
 		self.pot = 0
 		self.curRaise = 0
 		self.playerRaise = 0
@@ -177,6 +184,8 @@ class Game:
 		self.gameOver = False
 		self.roundOver = False
 		self.startPlayer = 1 - bigBlind
+		self.omniscientProb = [[-1.,-1.,-1.,-1.], [-1.,-1.,-1.,-1.]]
+		self.numRaises = [0, 0]
 		# -1 if tie
 		self.roundWinner = -1
 		for i in range(5):
@@ -197,12 +206,17 @@ class Game:
 			self.playerCards[i] = card
 		self.revealedCards = 0
 		self.p1Wins, self.tie, self.p2Wins = self.simulateGames(self.getPlayerCards(0), self.getPlayerCards(1), 10000)
+		self.updateOmniscient(0)
 		
 	def printCurrentState(self):
 		print "Total Chips: ", self.totalChips
 		print "Pot: ", self.pot
 		print "Big Blind: ", self.bigBlind
 		print " "
+
+	def updateOmniscient(self, i):
+		self.omniscientProb[0][i] = self.p1Wins + .5 * self.tie
+		self.omniscientProb[1][i] = self.p2Wins + .5 * self.tie
 
 	def newGame(self):
 		self.gameOver = False
@@ -212,7 +226,7 @@ class Game:
 		self.roundNum = 0
 		while not self.gameOver:
 			print "Round Number: ", self.roundNum
-			roundNum += 1
+			self.roundNum += 1
 			print handToGUI(self.board)
 			print handToGUI(self.getPlayerCards(0))
 			print handToGUI(self.getPlayerCards(1))
@@ -240,13 +254,18 @@ class Game:
 			self.river()
 			self.playStage()
 		self.distributeChips()
+		print "Omniscient: ", self.omniscientProb
+		for player in self.players:
+			player.updateParameters()
 
 	def playStage(self):
 		curPlayer = self.startPlayer
 		for player in self.players:
-			player.refreshStandardProb()
+			player.refreshStandardProbEst(.3)
+			player.refreshR()
 		# print "Standard prob: ", p[1].standardProb
 		print "Standard prob est: ", self.players[1].standardProbEst
+		self.bettingRound = 0
 		cc = 0
 		while (cc < 2):
 			push = min(self.players[curPlayer].action(), self.curRaise + self.totalChips[1 - curPlayer])
@@ -255,16 +274,22 @@ class Game:
 				self.roundOver = True
 				break
 			print "curPlayer: ", curPlayer, "curRaise: ", self.curRaise, "curPot: ", self.pot, "Push: ", push
-			if push == self.curRaise:
+			if min(self.totalChips[curPlayer], push) == self.curRaise:
 				cc += 1
 			else:
 				cc = 1
-			self.pushChips(curPlayer, push)
+			if (self.pushChips(curPlayer, push)):
+				self.numRaises[curPlayer] += 1
 			curPlayer = 1 - curPlayer
+			self.bettingRound += 1
+			self.totalPush += 1
 		print "Pot: ", self.pot, "Totalchips: ", self.totalChips
 
 	def linkPlayer(self, playerNum, player):
 		self.players[playerNum] = player
+		player.game = self
+		player.playerNum = playerNum
+		player.refreshCards()
 
 	def redeal(self):
 		self.roundOver = False
@@ -289,7 +314,14 @@ class Game:
 			self.players[i].refreshCards()
 			self.allIn[i] = False
 		self.revealedCards = 0
+		self.totalPush = 0
 		self.p1Wins, self.tie, self.p2Wins = self.simulateGames(self.getPlayerCards(0), self.getPlayerCards(1), 10000)
+		for i in range(4):
+			self.omniscientProb[0][i] = -1.
+			self.omniscientProb[1][i] = -1.
+		self.updateOmniscient(0)
+		self.numRaises[0] = 0
+		self.numRaises[1] = 0
 
 	def blinds(self):
 		smallBlind = 1 - self.bigBlind
@@ -308,17 +340,17 @@ class Game:
 	def flop(self):
 		self.revealedCards = 3
 		self.p1Wins, self.tie, self.p2Wins = self.simulateGames(self.getPlayerCards(0), self.getPlayerCards(1), 10000)
-		self.bettingRound = 0
+		self.updateOmniscient(1)
 
 	def turn(self):
 		self.revealedCards = 4
 		self.p1Wins, self.tie, self.p2Wins = self.simulateGames(self.getPlayerCards(0), self.getPlayerCards(1), 10000)
-		self.bettingRound = 0
+		self.updateOmniscient(2)
 
 	def river(self):
 		self.revealedCards = 5
 		self.p1Wins, self.tie, self.p2Wins = self.simulateGames(self.getPlayerCards(0), self.getPlayerCards(1), 10000)
-		self.bettingRound = 0
+		self.updateOmniscient(3)
 		if self.p1Wins > .99:
 			self.roundWinner = 0
 		elif self.tie > .99:
@@ -335,6 +367,9 @@ class Game:
 	# and then reduces it down if player does not have enough
 	def pushChips(self, playerNum, amt):
 		assert amt >= self.curRaise, "Not enough chips to call/raise"
+		# no 4-bets
+		if self.bettingRound == 3:
+			amt = self.curRaise
 		amt = min(amt, self.totalChips[playerNum])
 		if amt > self.curRaise:
 			self.curRaise = amt - self.curRaise
@@ -454,17 +489,23 @@ class Game:
 	
 
 class Player(object):
-	def __init__(self, game, playerNum):
-		self.game = game
-		self.playerNum = playerNum
-		self.cards = game.getPlayerCards(playerNum)
+	def __init__(self):
+		self.game = None
+		self.playerNum = -1
+		self.cards = (-1, -1)#game.getPlayerCards(playerNum)
 		self.standardProb = 0.
 		self.standardProbEst = 0.
 		# self.standardProb = self.game.standardProb(self.cards)
 		self.revealedCards = 0
+		self.R = [0,0,0,0]
 
 	# def linkGame(self, game):
 	# 	self.game = game
+
+	def refreshR(self):
+		stage = numCardsToStage(self.game.revealedCards)
+		# self.R[stage] = (self.game.totalPush + 1) / 2 - stage
+		self.R[stage] = self.game.numRaises[1 - self.playerNum]
 
 	def refreshRevealedCards(self):
 		self.revealedCards = self.game.revealedCards
@@ -481,6 +522,9 @@ class Player(object):
 	def action(self):
 		pass
 
+	def updateParameters(self):
+		pass
+
 class RandomAI(Player):
 	def action(self):
 		result = random.randint(-1,1)
@@ -492,7 +536,9 @@ class RandomAI(Player):
 			return -1
 	# filler function; RandomAI has no use for standardProb
 	def refreshStandardProb(self, n=100):
-		self.standardProb = 0
+		pass
+	def refreshStandardProbEst(self, p, n=100):
+		pass
 
 class RationalAI(Player):
 	# def __init__(self, game, playerNum, c, r):
@@ -514,15 +560,82 @@ class AlwaysCallAI(Player):
 		return self.game.curRaise
 	# filler function; AlwaysCallAI has no use for standardProb
 	def refreshStandardProb(self, n=100):
-		self.standardProb = 0
+		pass
+	def refreshStandardProbEst(self, p, n=100):
+		pass
+
+class PotAI(Player):
+	def __init__(self, m=1., a=1., b=0., eta=.05):
+		super(PotAI, self).__init__()
+		self.m = m
+		self.a = a
+		self.b = b
+		self.eta = eta
+		self.estP = 0.
+		self.allP = [0., 0., 0., 0.]
+		
+	def action(self):
+		p = self.standardProbEst
+		B = self.game.curRaise
+		C = self.game.pot
+		# p *= .6
+		# print p
+		if p > .8:
+			return self.game.curRaise + self.game.pot
+		# A = (p * C - (1 - p) * B) / (1 - 2 * p)
+		A = (p * C - (1 - p) * B)
+		if (A < 0):
+			return -1
+		else:
+			return self.game.curRaise
+
+class SGDAI(Player):
+	def __init__(self, m=.688, a=0.789, b=-.052., eta=.03):
+		super(SGDAI, self).__init__()
+		self.m = m
+		self.a = a
+		self.b = b
+		self.eta = eta
+		self.estP = [0., 0., 0., 0.]
+		self.refinedP = [0., 0., 0., 0.]
+		self.R = [0, 0, 0, 0]
+		
+	def action(self):
+		stage = numCardsToStage(self.game.revealedCards)
+		if stage == 0:
+			assert self.R[stage] == 0, "r[0] not 0"
+		self.estP[stage] = self.standardProbEst
+
+		p = self.standardProbEst
+		p = self.m ** self.R[stage] * (self.a * p + self.b)
+		
+		self.refinedP[stage] = p
+		print "Stage: ", stage, "Estimated p: ", p
+		if p > .7:
+			return self.game.curRaise + self.game.pot
+
+		B = self.game.curRaise
+		C = self.game.pot
+		# A = (p * C - (1 - p) * B) / (1 - 2 * p)
+		A = (p * C - (1 - p) * B)
+		if (A < 0):
+			print "NO"
+			return -1
+		else:
+			print "WORTH"
+			return self.game.curRaise
+
+	def updateParameters(self):
+		opponentCards = self.game.getPlayerCards(1 - self.playerNum)
+		for stage in range(1, numCardsToStage(self.game.revealedCards) + 1):
+			print "Stage: ", stage
+			diffP = self.refinedP[stage] - self.game.omniscientProb[self.playerNum][stage]
+			self.a -= self.eta * 2 * diffP * self.m ** self.R[stage] * self.estP[stage]
+			self.b -= self.eta * 2 * diffP * self.m ** self.R[stage]
+			self.m -= self.eta * 2 * diffP * self.R[stage] * self.refinedP[stage] / self.m
+			self.m = max(self.m, .5)
+		print "a: ", self.a, "b: ", self.b, "m: ", self.m
+
 
 
 # class AgressiveAI(Player):
-
-
-# newGame = Game(2)
-# begin = time.time()
-# for i in range(50 ** 3):
-# 	x = newGame.evaluatePile([1,2,3,4,0,5,6])
-# print time.time() - begin
-# print newGame.flush([3,7,11,15,18])

@@ -4,7 +4,7 @@ totalDiff = [0. for i in range(10)]
 totalSDiff = [0. for i in range(10)]
 count = 0
 
-for iteration in range(20):
+for iteration in range(5):
 	game = Game(2, 100, 0)
 	print handToGUI(game.board)
 	# print handToGUI(game.getPlayerCards(0))
