@@ -590,7 +590,7 @@ class PotAI(Player):
 			return self.game.curRaise
 
 class SGDAI(Player):
-	def __init__(self, m=.8, a=0.8, b=-.052, eta=.03):
+	def __init__(self, m=.8, a=0.7728, b=.013, eta=.03):
 		super(SGDAI, self).__init__()
 		self.m = m
 		self.a = a
