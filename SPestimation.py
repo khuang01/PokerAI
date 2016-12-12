@@ -4,13 +4,14 @@ totalDiff = [0. for i in range(10)]
 totalSDiff = [0. for i in range(10)]
 count = 0
 
-for iteration in range(5):
-	game = Game(2, 100, 0)
+for iteration in range(20):
+	game = Game(100, 0)
 	print handToGUI(game.board)
 	# print handToGUI(game.getPlayerCards(0))
 	print handToGUI(game.getPlayerCards(1))
 	p = [None, None]
-	p[1] = RationalAI(game, 1)
+	p[1] = RationalAI()
+	game.linkPlayer(1, p[1])
 	p[1].refreshStandardProb()
 	print "SP: ", p[1].standardProb
 	# print "SPE: ", p[1].standardProbEst

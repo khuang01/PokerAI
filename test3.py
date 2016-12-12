@@ -1,7 +1,7 @@
 from Poker import *
 import time
 
-game = Game(2, 100, 0)
+game = Game(100, 0)
 game.linkPlayer(0, RationalAI())
 # game.linkPlayer(1, RandomAI())
 game.linkPlayer(1, SGDAI())
